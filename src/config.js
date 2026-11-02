@@ -18,8 +18,8 @@ export const invitation = {
   startsAt: '2026-11-08T19:00:00+05:00',
   endsAt: '2026-11-08T21:00:00+05:00',
   timezone: 'Asia/Almaty',
-  meetingVideo: '', // '/videos/our-story.mp4'
-  invitationVideo: '', // '/videos/your-invitation.mp4'
+  meetingVideo: '/videos/our-story.mp4',
+  invitationVideo: '/videos/your-invitation.mp4',
   gameTrack: {
     title: 'like JENNIE',
     artist: 'JENNIE',

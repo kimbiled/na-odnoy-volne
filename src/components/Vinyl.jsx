@@ -1,7 +1,7 @@
 import { Heart, Music2, Sparkles } from 'lucide-react'
 import { invitation } from '../config'
 
-export default function Vinyl({ onPlay, spinning, onSpin }) {
+export default function Vinyl({ onPlay, spinning, onSpin, unlocked }) {
   return <div className="hero-art">
     <div className="art-orbit" aria-hidden="true" />
     <div className="handwritten art-note">некоторые совпадения<br />совсем не случайны</div>
@@ -11,7 +11,7 @@ export default function Vinyl({ onPlay, spinning, onSpin }) {
       <div className="vinyl-reflection" /><div className="vinyl-label"><span className="label-top">НА ОДНОЙ ВОЛНЕ</span><Heart size={22} strokeWidth={1.3} /><strong>ты & я</strong><span className="label-bottom">ЛИМИТИРОВАННЫЙ ТИРАЖ: 2</span><i /></div>
     </button>
     <div className="sun-sticker" aria-hidden="true"><span>100%<br /><small>наш вайб</small></span></div>
-    <button className="art-ticket" onClick={onPlay}><div><span className="ticket-micro">{invitation.city ? `${invitation.city.toLocaleUpperCase('ru')} · ${invitation.time}` : 'ОДИН ОСОБЕННЫЙ ВЕЧЕР'}</span><strong>08<span>/ {invitation.month || 'концерт'}</span></strong></div><span className="ticket-perf" /><Music2 size={29} strokeWidth={1.3} /><span className="ticket-number">NO. 000002</span></button>
+    <button className="art-ticket" onClick={onPlay}><div><span className="ticket-micro">{unlocked ? `${invitation.city.toLocaleUpperCase('ru')} · ${invitation.time}` : 'СЕКРЕТ ДЛЯ ТЕБЯ'}</span><strong>{unlocked ? invitation.day : '??'}<span>/ {unlocked ? invitation.month : 'сюрприз'}</span></strong></div><span className="ticket-perf" /><Music2 size={29} strokeWidth={1.3} /><span className="ticket-number">NO. 000002</span></button>
     <span className="art-caption"><span /> ПЛАСТИНКУ МОЖНО ПОКРУТИТЬ</span>
   </div>
 }

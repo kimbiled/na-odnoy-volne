@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { calmSequence, createNotes } from '../../src/game.js'
+import { GAME_DURATION, REQUIRED_HITS, calmSequence, createNotes } from '../../src/game.js'
+import { installMediaClock } from './helpers/mediaClock.js'
 
 const laneLabels = ['Нота до', 'Нота ми', 'Нота соль']
 
@@ -16,9 +17,17 @@ test('mobile layout, story modal, accessible close, and interactive record', asy
   expect((await page.getByRole('heading', { level: 1 }).boundingBox()).x).toBeGreaterThanOrEqual(18)
   await page.getByRole('button', { name: 'Смотреть первое видео: как всё началось' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByText('Самые личные кадры — совсем скоро')).toBeVisible()
+  const video = page.locator('video')
+  await expect(video).toBeVisible()
+  await expect(video.locator('source')).toHaveAttribute('src', '/videos/our-story.mp4')
+  await expect.poll(() => video.evaluate(e => e.readyState)).toBeGreaterThan(0)
+  expect(await video.evaluate(e => e.duration)).toBeGreaterThan(80)
+  await video.evaluate(e => e.play())
+  await expect.poll(() => video.evaluate(e => e.currentTime)).toBeGreaterThan(.1)
+  const videoHandle = await video.elementHandle()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(await videoHandle.evaluate(e => e.paused)).toBe(true)
   await page.evaluate(() => document.activeElement?.blur())
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.screenshot({ path: `test-results/${testInfo.project.name}-home.png`, fullPage: true })
@@ -61,6 +70,7 @@ test('calm game unlocks the event, calendar and ticket downloads, RSVP persists'
 })
 
 test('rhythm mode scores timed touches, pauses, and unlocks', async ({ page }) => {
+  await installMediaClock(page)
   await page.clock.install({ time: new Date('2026-11-03T00:00:00Z') })
   await page.clock.pauseAt(new Date('2026-11-03T00:01:00Z'))
   await page.goto('/')
@@ -74,22 +84,43 @@ test('rhythm mode scores timed touches, pauses, and unlocks', async ({ page }) =
   // The chart clock resumes from 500ms: wall time on pause must not consume notes.
   const notes = createNotes()
   let time = 500
-  for (const note of notes.slice(0, 10)) {
-    await page.clock.runFor(note.at - time)
+  for (const note of notes.slice(0, REQUIRED_HITS)) {
+    const target = Math.round(note.at)
+    await page.clock.runFor(target - time)
     await page.getByRole('button', { name: laneLabels[note.lane], exact: true }).click()
-    time = note.at
+    time = target
+    if (note.id === REQUIRED_HITS - 2) await expect(page.getByTestId('game-won')).toHaveCount(0)
   }
   await expect(page.getByTestId('game-won')).toBeVisible()
 })
 
 test('missed rhythm chart offers a retry and the untimed mode', async ({ page }) => {
+  await installMediaClock(page)
   await page.clock.install({ time: new Date('2026-11-03T00:00:00Z') })
   await page.clock.pauseAt(new Date('2026-11-03T00:01:00Z'))
   await page.goto('/')
   await page.getByRole('button', { name: 'У меня для тебя сюрприз' }).click()
   await page.getByRole('button', { name: 'Давай сыграем' }).click()
-  await page.clock.runFor(14000)
-  await expect(page.getByText('Ещё один', { exact: false })).toBeVisible()
+  await page.clock.runFor(GAME_DURATION + 1000)
+  await expect(page.getByText('Продолжим', { exact: false }).first()).toBeVisible()
   await page.getByRole('button', { name: 'Хочу без спешки' }).click()
   await expect(page.getByRole('button', { name: 'Начать мелодию', exact: true })).toBeVisible()
+})
+
+test('notes follow audio time and freeze during buffering instead of drifting with wall time', async ({ page }) => {
+  await installMediaClock(page)
+  await page.clock.install({ time: new Date('2026-11-03T00:00:00Z') })
+  await page.clock.pauseAt(new Date('2026-11-03T00:01:00Z'))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'У меня для тебя сюрприз' }).click()
+  await page.getByRole('button', { name: 'Давай сыграем' }).click()
+  await page.evaluate(() => window.__gameAudio.pause())
+  await page.clock.runFor(5000)
+  await expect(page.getByText('0 / 50', { exact: false })).toBeVisible()
+  const first = createNotes()[0]
+  await page.evaluate(at => { window.__gameAudio.currentTime = at / 1000 }, first.at)
+  await page.clock.runFor(16)
+  await page.getByRole('button', { name: laneLabels[first.lane], exact: true }).click()
+  await expect(page.getByText('1 / 50', { exact: false })).toBeVisible()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('one-wave-invitation-v2')).score)).toBe(1)
 })

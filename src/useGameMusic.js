@@ -29,7 +29,8 @@ export default function useGameMusic({ source, sound, phase }) {
 
   const play = useCallback(({ restart = false, enabled = sound } = {}) => {
     const audio = audioRef.current
-    if (!audio || !enabled) return
+    if (!audio) return
+    audio.muted = !enabled
     if (audio.error) audio.load()
     if (restart) audio.currentTime = 0
     // Called directly from Start / Resume / Unmute so mobile browsers allow sound.
@@ -40,10 +41,13 @@ export default function useGameMusic({ source, sound, phase }) {
   }, [sound])
 
   const stop = useCallback(() => { audioRef.current?.pause() }, [])
+  const getTime = useCallback(() => audioRef.current?.currentTime * 1000 || 0, [])
+  const setMuted = useCallback(muted => { if (audioRef.current) audioRef.current.muted = muted }, [])
 
   useEffect(() => {
-    if (phase !== 'playing' || !sound) stop()
-  }, [phase, sound, stop])
+    setMuted(!sound)
+    if (phase !== 'playing') stop()
+  }, [phase, sound, stop, setMuted])
 
-  return { play, stop, status }
+  return { play, stop, getTime, setMuted, status }
 }

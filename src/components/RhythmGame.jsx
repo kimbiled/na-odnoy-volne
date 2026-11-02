@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check, Heart, Music2, Pause, Play, RotateCcw, Sparkles, Volume2, VolumeX } from 'lucide-react'
-import { APPROACH_TIME, GAME_DURATION, HIT_WINDOW, NOTE_COUNT, REQUIRED_HITS, calmSequence, createNotes, findHit, getAccuracy, getProgress } from '../game'
+import { APPROACH_TIME, GAME_DURATION, HIT_WINDOW, REQUIRED_HITS, calmSequence, createNotes, findHit, getAccuracy, getProgress } from '../game'
 import { playNote, prepareAudio } from '../audio'
 import { invitation } from '../config'
 import useGameMusic from '../useGameMusic'
 
-export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
+export default function RhythmGame({ onUnlock, sound, onSoundChange, initialScore = 0, onProgress }) {
   const [phase, setPhase] = useState('intro')
   const [mode, setMode] = useState('rhythm')
   const [elapsed, setElapsed] = useState(0)
-  const [hits, setHits] = useState(0)
+  const [hits, setHits] = useState(initialScore >= REQUIRED_HITS ? 0 : initialScore)
   const [feedback, setFeedback] = useState('Слушай. Чувствуй. Касайся.')
   const [activeLane, setActiveLane] = useState(-1)
   const [calmStep, setCalmStep] = useState(0)
@@ -18,12 +18,15 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
   const resolved = useRef(new Set())
   const played = useRef(new Set())
   const clock = useRef({ start: 0, offset: 0, elapsed: 0 })
-  const hitCount = useRef(0)
+  const hitCount = useRef(initialScore >= REQUIRED_HITS ? 0 : initialScore)
   const laneTimer = useRef(null)
   const phaseRef = useRef(phase)
   phaseRef.current = phase
   const music = useGameMusic({ source: invitation.gameTrack?.source, sound, phase })
   const usePiano = !invitation.gameTrack?.source || music.status === 'error' || music.status === 'blocked'
+  const readTime = useCallback(() => usePiano
+    ? performance.now() - clock.current.start + clock.current.offset
+    : music.getTime(), [usePiano, music.getTime])
 
   useEffect(() => () => clearTimeout(laneTimer.current), [])
 
@@ -32,9 +35,10 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
     music.play({ restart: true })
     resolved.current = new Set()
     played.current = new Set()
-    hitCount.current = 0
+    const startingScore = initialScore >= REQUIRED_HITS ? 0 : initialScore
+    hitCount.current = startingScore
     clock.current = { start: performance.now(), offset: 0, elapsed: 0 }
-    setElapsed(0); setHits(0); setCombo(0); setCalmStep(0)
+    setElapsed(0); setHits(startingScore); setCombo(0); setCalmStep(0)
     setFeedback(mode === 'calm' ? 'Повтори мелодию по подсказке' : 'Лови ноты на светлой линии')
     setPhase('playing')
   }
@@ -43,7 +47,13 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
     if (phase !== 'playing' || mode !== 'rhythm') return
     let frame
     const update = now => {
-      const time = now - clock.current.start + clock.current.offset
+      const time = readTime()
+      // The media clock drives both the visuals and scoring. Buffering freezes
+      // the chart; a muted track keeps running. Keep a fallback clock aligned.
+      if (!usePiano) {
+        clock.current.start = now
+        clock.current.offset = time
+      }
       clock.current.elapsed = time
       setElapsed(time)
       for (const note of notes.current) {
@@ -64,14 +74,15 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
     }
     frame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(frame)
-  }, [phase, mode, sound, usePiano])
+  }, [phase, mode, sound, usePiano, readTime])
 
   const pause = useCallback(() => {
     if (phaseRef.current !== 'playing') return
+    clock.current.offset = readTime()
+    clock.current.elapsed = clock.current.offset
     music.stop()
-    clock.current.offset = clock.current.elapsed
     setPhase('paused')
-  }, [music.stop])
+  }, [music.stop, readTime])
 
   useEffect(() => {
     const hidden = () => { if (document.hidden) pause() }
@@ -99,12 +110,14 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
       if (sound && usePiano) playNote(lane)
       const next = calmStep + 1
       setCalmStep(next)
-      setHits(Math.round(next / calmSequence.length * REQUIRED_HITS))
-      setFeedback(next === calmSequence.length ? 'Это наша мелодия!' : 'Да, именно так!')
-      if (next === calmSequence.length) setPhase('won')
+      hitCount.current = Math.min(REQUIRED_HITS, hitCount.current + 1)
+      setHits(hitCount.current)
+      onProgress?.(hitCount.current)
+      setFeedback(hitCount.current >= REQUIRED_HITS ? 'Это наша мелодия!' : 'Да, именно так!')
+      if (hitCount.current >= REQUIRED_HITS) setPhase('won')
       return
     }
-    const time = performance.now() - clock.current.start + clock.current.offset
+    const time = readTime()
     const note = findHit(notes.current, resolved.current, lane, time)
     if (!note) {
       setFeedback('Чуть ближе к линии — и получится')
@@ -113,11 +126,12 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
     resolved.current.add(note.id)
     hitCount.current += 1
     setHits(hitCount.current)
+    onProgress?.(hitCount.current)
     setCombo(value => value + 1)
     setFeedback(getAccuracy(note.at - time))
     if (sound && usePiano) playNote(lane)
     if (hitCount.current >= REQUIRED_HITS) setPhase('won')
-  }, [phase, mode, calmStep, sound, usePiano])
+  }, [phase, mode, calmStep, sound, usePiano, readTime, onProgress])
 
   useEffect(() => {
     const keydown = event => {
@@ -130,7 +144,7 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
 
   const toggleSound = () => {
     if (!sound) prepareAudio()
-    if (sound) music.stop()
+    if (sound) music.setMuted(true)
     else if (phase === 'playing') music.play({ enabled: true })
     onSoundChange(!sound)
   }
@@ -147,9 +161,9 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
   if (phase === 'retry') return <div className="game-result">
     <div className="result-icon"><Music2 size={40} /></div>
     <span className="eyebrow">УЖЕ ПОЧТИ</span>
-    <h2>Ещё один<br />маленький дубль?</h2>
-    <p>Ты поймала {hits} из {REQUIRED_HITS} нужных нот. Попробуем снова или сыграем без спешки?</p>
-    <button className="button button-dark" onClick={begin}><RotateCcw size={17} /> Ещё раз</button>
+    <h2>Продолжим<br />нашу мелодию?</h2>
+    <p>У тебя уже {hits} из {REQUIRED_HITS} баллов. Счёт сохранён — каждая следующая нота приближает приглашение.</p>
+    <button className="button button-dark" onClick={begin}><RotateCcw size={17} /> Продолжить со счётом {hits}</button>
     <button className="text-button" onClick={() => { setMode('calm'); setPhase('intro') }}>Хочу без спешки <ArrowRight size={16} /></button>
   </div>
 
@@ -157,13 +171,13 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
     <div className="game-top"><a className="game-track" href={invitation.gameTrack.link} target="_blank" rel="noreferrer" aria-label="like JENNIE — слушать в Apple Music"><Music2 size={17} /><span>{invitation.gameTrack.title}<small>{music.status === 'error' || music.status === 'blocked' ? 'Музыка недоступна · играем дальше' : `${invitation.gameTrack.artist} · фрагмент Apple Music ↗`}</small></span></a><button className="icon-button" aria-label={sound ? 'Выключить звук игры' : 'Включить звук игры'} onClick={toggleSound}>{sound ? <Volume2 size={18} /> : <VolumeX size={18} />}</button></div>
     <h2>Поймай нашу волну<span className="orange">.</span></h2>
     {phase === 'intro' ? <>
-      <p className="game-description">За каждым хорошим вечером — немного магии. Собери мелодию, чтобы открыть моё приглашение.</p>
+      <p className="game-description">Поймай 50 нот под like JENNIE — откроются видео и детали вечера. {hits > 0 ? `Твой счёт: ${hits} / 50 ♡` : 'Одна нота — один балл ♡'}</p>
       <div className="mode-switch" aria-label="Режим игры">
         <button aria-pressed={mode === 'rhythm'} className={mode === 'rhythm' ? 'selected' : ''} onClick={() => setMode('rhythm')}><Music2 size={15} /> Поймать ритм</button>
         <button aria-pressed={mode === 'calm'} className={mode === 'calm' ? 'selected' : ''} onClick={() => setMode('calm')}><Heart size={15} /> Без спешки</button>
       </div>
       <div className="game-demo" aria-hidden="true"><div className="demo-lane"><span>♪</span></div><div className="demo-lane"><span>♫</span></div><div className="demo-lane"><span>♪</span></div><div className="demo-hitline" /><div className="demo-touch"><Sparkles size={19} /></div></div>
-      <div className="game-instructions"><span>01</span><p>{mode === 'rhythm' ? 'Ноты падают в трёх дорожках.' : 'Сверху появится короткая мелодия.'}</p><span>02</span><p>{mode === 'rhythm' ? 'Нажимай на клавиши, когда нота на светлой линии.' : 'По очереди нажимай подсвеченные клавиши.'}</p><span>03</span><p>{mode === 'rhythm' ? 'Поймай 10 нот. У тебя всё получится ♡' : 'Здесь нет таймера. Просто играй в своём темпе ♡'}</p></div>
+      <div className="game-instructions"><span>01</span><p>{mode === 'rhythm' ? 'Ноты идут в ритм песни по трём дорожкам.' : 'Сверху показаны следующие ноты.'}</p><span>02</span><p>{mode === 'rhythm' ? 'Нажимай на клавиши, когда нота на светлой линии.' : 'По очереди нажимай подсвеченные клавиши.'}</p><span>03</span><p>Набери 50 баллов. Между попытками счёт сохраняется ♡</p></div>
       <button className="button button-dark game-start" onClick={begin}><Play size={17} fill="currentColor" /> {mode === 'rhythm' ? 'Давай сыграем' : 'Начать мелодию'}</button>
       <p className="keyboard-tip">На телефоне — касайся клавиш · На компьютере — A, S, D</p>
     </> : <>
@@ -179,7 +193,7 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
           })}
           <div className="hit-line" aria-hidden="true" />
           <span className="hit-label">ПОЙМАЙ ЗДЕСЬ</span>
-        </> : <div className="calm-melody"><span className="eyebrow">ТВОЯ МЕЛОДИЯ</span><div className="melody-sequence">{calmSequence.map((lane, index) => <span key={index} className={`${index < calmStep ? 'done' : ''} ${index === calmStep ? 'current' : ''}`}>{index < calmStep ? <Check size={17} /> : ['до', 'ми', 'соль'][lane]}</span>)}</div><Music2 className="calm-music" size={65} /><p>Нажми «{['до', 'ми', 'соль'][calmSequence[calmStep]]}»</p></div>}
+        </> : <div className="calm-melody"><span className="eyebrow">СЛЕДУЮЩИЕ НОТЫ</span><div className="melody-sequence">{calmSequence.slice(calmStep, calmStep + 8).map((lane, index) => <span key={calmStep + index} className={index === 0 ? 'current' : ''}>{['до', 'ми', 'соль'][lane]}</span>)}</div><Music2 className="calm-music" size={65} /><p>Нажми «{['до', 'ми', 'соль'][calmSequence[calmStep]]}»</p></div>}
         {phase === 'paused' && <div className="pause-overlay"><Pause size={32} /><h3>Маленькая пауза</h3><button className="button button-orange" onClick={resume}><Play size={16} /> Продолжить</button></div>}
       </div>
       <div className="game-pads">{[0, 1, 2].map(lane => <button key={lane} className={`game-pad pad-${lane} ${activeLane === lane ? 'pressed' : ''} ${mode === 'calm' && lane === calmSequence[calmStep] ? 'suggested' : ''}`} disabled={phase !== 'playing'} onPointerDown={event => { event.preventDefault(); tap(lane) }} onClick={event => { if (event.detail === 0) tap(lane) }} aria-label={`Нота ${['до', 'ми', 'соль'][lane]}`}><Music2 size={23} /><span>{['до', 'ми', 'соль'][lane]}</span><kbd>{['A', 'S', 'D'][lane]}</kbd></button>)}</div>

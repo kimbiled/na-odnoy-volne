@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { APPROACH_TIME, GAME_DURATION, HIT_WINDOW, NOTE_COUNT, REQUIRED_HITS, calmSequence, createNotes, findHit, getAccuracy, getProgress } from '../src/game.js'
+import { APPROACH_TIME, BEAT_MS, BEAT_OFFSET, GAME_DURATION, HIT_WINDOW, NOTE_COUNT, REQUIRED_HITS, calmSequence, createNotes, findHit, getAccuracy, getProgress } from '../src/game.js'
 
 test('the whole chart is playable before the timer finishes', () => {
   const notes = createNotes()
@@ -34,6 +34,18 @@ test('winning threshold and feedback remain bounded', () => {
   assert.equal(getAccuracy(0), 'Идеально!')
   assert.equal(getAccuracy(-110), 'Идеально!')
   assert.equal(getAccuracy(150), 'В ритме!')
-  assert.equal(calmSequence.length, 8)
+  assert.equal(REQUIRED_HITS, 50)
+  assert.equal(calmSequence.length, REQUIRED_HITS)
   assert.ok(calmSequence.every(lane => [0, 1, 2].includes(lane)))
+})
+
+test('the chart follows the measured song beat and lasts long enough for 50 points', () => {
+  const notes = createNotes()
+  assert.ok(notes.length > 50)
+  assert.ok(notes[49].at > 23000)
+  assert.ok(GAME_DURATION >= 30000)
+  for (const note of notes) {
+    const beat = (note.at - BEAT_OFFSET) / BEAT_MS
+    assert.ok(Math.abs(beat - Math.round(beat)) < 1e-8)
+  }
 })
