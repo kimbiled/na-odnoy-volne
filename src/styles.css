@@ -266,6 +266,10 @@ h2 em { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; color:
 .game-top { display: flex; justify-content: space-between; align-items: center; padding-right: 29px; margin-bottom: 12px; color: #858b76; }
 .game-top .eyebrow { font-size: 8px; }
 .game-top .icon-button { width: 30px; height: 30px; }
+.game-track { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: #7e896e; }
+.game-track > span { font-size: 11px; line-height: 1.35; font-weight: 500; }
+.game-track small { display: block; font-size: 8px; font-weight: 400; margin-top: 2px; color: #949b85; }
+.game-track:hover { color: #b8784f; }
 .game-content h2 { font-size: 30px; letter-spacing: -1.2px; }
 .game-description { color: #818572; font-size: 11px; line-height: 1.85; margin: 14px 0 21px; }
 .mode-switch { padding: 4px; display: flex; gap: 4px; border: 1px solid #dcded0; background: #eaece2; border-radius: 7px; }

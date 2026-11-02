@@ -8,7 +8,7 @@ test('mobile layout, story modal, accessible close, and interactive record', asy
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('волне.')
-  await expect(page.getByText('АЛУА, ЭТОТ СЮРПРИЗ ДЛЯ ТЕБЯ')).toBeVisible()
+  await expect(page.getByText('СОЛНЦЕ, ЭТОТ СЮРПРИЗ ДЛЯ ТЕБЯ')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Покрутить пластинку' }).click()
   await expect(page.locator('.vinyl')).toHaveClass(/is-spinning/)
