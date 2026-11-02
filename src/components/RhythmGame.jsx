@@ -144,7 +144,7 @@ export default function RhythmGame({ onUnlock, sound, onSoundChange }) {
     <button className="text-button" onClick={() => { setMode('calm'); setPhase('intro') }}>Хочу без спешки <ArrowRight size={16} /></button>
   </div>
 
-  return <div className="game-content">
+  return <div className={`game-content ${phase === 'intro' ? 'game-intro' : 'game-active'}`}>
     <div className="game-top"><span className="eyebrow">МИНИ-ИГРА / 01</span><button className="icon-button" aria-label={sound ? 'Выключить звук игры' : 'Включить звук игры'} onClick={toggleSound}>{sound ? <Volume2 size={18} /> : <VolumeX size={18} />}</button></div>
     <h2>Поймай нашу волну<span className="orange">.</span></h2>
     {phase === 'intro' ? <>
