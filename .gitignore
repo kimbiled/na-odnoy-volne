@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+!.env.example
+.sites-runtime/
+.npm-cache/
+test-results/
+playwright-report/
+.DS_Store
